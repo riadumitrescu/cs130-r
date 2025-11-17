@@ -1,0 +1,236 @@
+---
+title: "CS130 Assignment #"
+date: "October 19, 2025"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## (1) – Fisher Exact Test
+the sharp null is
+
+tau0 = 1.25.
+
+If this were true, then for every child we know exactly what their missing potential outcome must have been, because the formula Y1 = tau0 * Y0 needs to be for each unit. choose(6, 3) = 20 possible random assignments.
+
+```{r}
+# Observed data
+control <- c(55.0, 72.0, 72.7)
+treat   <- c(70.0, 66.0, 78.9)
+
+tau_obs <- mean(treat) / mean(control)
+
+tau0 <- 1.25
+
+# Impute missing potential outcomes
+Y0 <- c(control, treat / tau0)
+Y1 <- c(control * tau0, treat)
+
+# All possible assignments of 3 treated out of 6
+A <- combn(6, 3)  
+
+# Compute Fisher randomization distribution
+Tvals <- apply(A, 2, function(treated) {
+  control_idx <- setdiff(1:6, treated)
+  mean(Y1[treated]) / mean(Y0[control_idx])
+})
+
+# Two sided Fisher p value
+p_value <- mean(abs(Tvals - tau0) >= abs(tau_obs - tau0))
+p_value
+
+Tvals
+
+```
+
+The p value comes from asking: How many of these 20 null values are at least as far from 1.25 as the observed value 1.076? 6 of the 20 values are as extreme or more extreme. 6 / 20 = 0.30
+
+
+## (2) - Gemini App
+My Gemini App: https://ai.studio/apps/drive/1UD7HY2-0f5vQ3nev1L3o6LFWxovo4Js2 
+
+
+
+
+## (3) - Simulated Data
+```{r}
+set.seed(1)
+
+# treatment assignmen  40 treated, 100 control
+W <- c(rep(1, 40), rep(0, 100))
+
+# X1 balanced in mean but not variance
+# mean the same, variance(T) = 2 * variance(C)
+
+X1_T <- rnorm(40, mean = 0, sd = sqrt(2))   # treated variance = 2
+X1_C <- rnorm(100, mean = 0, sd = 1)        # control variance = 1
+
+X1 <- c(X1_T, X1_C)
+
+# treatment effect is linear in X1
+# choose simplest linear function
+tau <- 1 + 0.5 * X1
+
+# irreducible error = 0 
+# potential outcomes
+Y0 <- X1
+Y1 <- Y0 + tau
+
+# observed outcome
+Y <- W * Y1 + (1 - W) * Y0
+
+#  ATE, ATT, ATC
+ATE <- mean(Y1 - Y0)
+ATT <- mean((Y1 - Y0)[W == 1])
+ATC <- mean((Y1 - Y0)[W == 0])
+
+ATE; ATT; ATC
+
+```
+
+### 1. 
+When I think about what should happen in a real randomized controlled trial, I expect the treatment group and the control group to look very similar in their background characteristics, because randomization is supposed to make the two groups comparable. That means that, on average, not only should the means of the covariate be the same, but the overall distribution, including the variance, should also be pretty similar unless the sample is extremely small. In this simulated dataset, the means of X1 are the same in the treated and control groups, but the variances are intentionally very different, with the treated group having twice as much variability. This is not something I would normally expect to see if the treatment was assigned randomly, because genuine random assignment would not consistently create such a large difference in variance.
+
+### 2.
+```{r}
+mean(Y[W == 1]) - mean(Y[W == 0])
+```
+The difference in mean outcomes is 1.143829.
+
+### 3
+
+The naive difference is not estimating the ATE It is closer to the ATT (maybe because the treatment effect depends on X1 and the treated group has a wider spread in X1 than the control group). This means the treated people have slightly bigger treatment effects, which makes the naive difference even larger than the ATT. So the estimator is biased for the ATE, and it is basically capturing the treated units’ effect instead.
+
+
+### 4 
+naive treatment effect = average outcome of treated units minus average outcome of control units 
+so, tau_naive = mean(Y | W = 1) minus mean(Y | W = 0)
+
+This formula would estimate the ATE correctly in a real RCT because random assignment makes the two groups comparable. However, in my simulated dataset the treated group has a larger variance in X1, and the treatment effect depends on X1, so the two groups are no longer similar. It is closer to the ATT, but still not that close, because the treated group contains more high X1 people, and high X1 means a stronger treatment effect, so, the naive estimate ends up showing some form of the ATT.
+ 
+### 5
+No, it does not matter, because in this exercise I created the entire dataset myself, so the ATE, ATT and ATC are already defined for this specific set of units, and I am not trying to generalize to a larger population.
+
+## (4) - Quartic Treatment Effect
+```{r}
+set.seed(1)
+
+W <- c(rep(1, 40), rep(0, 100))
+
+# X1: same mean but different variance
+X1_T <- rnorm(40, mean = 0, sd = sqrt(2))
+X1_C <- rnorm(100, mean = 0, sd = 1)
+X1 <- c(X1_T, X1_C)
+
+# quartic treatment effect
+tau <- X1^4
+
+# potential outcomes
+Y0 <- X1
+Y1 <- Y0 + tau
+
+# observed outcome
+Y <- W * Y1 + (1 - W) * Y0
+
+ATE <- mean(Y1 - Y0)
+ATT <- mean((Y1 - Y0)[W == 1])
+ATC <- mean((Y1 - Y0)[W == 0])
+
+ATE
+ATT
+ATC
+
+
+```
+
+
+
+
+## (5) - Skewed Covariate Distribution
+```{r}
+
+set.seed(1)
+nT <- 40
+nC <- 100
+
+# treatment indicator
+W <- c(rep(1, nT), rep(0, nC))
+
+# Treated group: roughly symmetric X1 (skew ~ 0)
+X1_T_raw <- rnorm(nT, mean = 0, sd = 1)
+
+# Control group: positively skewed X1 (skew > 0)
+X1_C_raw <- rlnorm(nC, meanlog = 0, sdlog = 1)
+
+# Match mean and variance of control to treated
+mT <- mean(X1_T_raw)
+sT <- sd(X1_T_raw)
+
+mC <- mean(X1_C_raw)
+sC <- sd(X1_C_raw)
+
+# Rescale control so mean and sd match treated
+X1_T <- X1_T_raw
+X1_C <- (X1_C_raw - mC) / sC * sT + mT
+
+# Combine
+X1 <- c(X1_T, X1_C)
+
+# Simple skewness function
+skew <- function(x) mean((x - mean(x))^3) / sd(x)^3
+
+# Check moments
+mean_T <- mean(X1_T); mean_C <- mean(X1_C)
+var_T  <- var(X1_T);  var_C  <- var(X1_C)
+skew_T <- skew(X1_T); skew_C <- skew(X1_C)
+
+mean_T; mean_C
+var_T;  var_C
+skew_T; skew_C
+
+```
+
+
+## (7) - Lalonde Dataset
+
+```{r}
+# keep only RCT units (0 = control, 1 = treatment)
+RCT <- subset(lalonde, treat %in% c(0, 1))
+
+# run simple regression: outcome re79 on treatment
+model <- lm(re79 ~ treat, data = RCT)
+
+summary(model)
+
+# 95 percent CI for the treatment effect
+confint(model, "treat")
+
+```
+
+
+
+## (8) - 
+
+
+
+
+
+AI Statement: 
+The plot in Q5 was was generated with the help of GPT-5, as I wanted to visualize the positive → negative → positive coefficient sign reversal clearly and understand how such partial-regression plots are constructed in R. 
+I used this prompt: 
+"can you write simple r code using base r not ggplot that shows how the coefficient on x1 changes sign across three regressions and make three small plots one for the raw data and two partial plots that show how the relationship changes when i control for x2 and x3 include 95 percent confidence intervals and label everything clearly"
+
+I also used AI to generate the plot for Q9 because I  wanted to see if there’s a simpsons paradox pattern like the kidney stone story but in credit data. I used this prompt: "can you write easy r code with glm that compares student vs non student default rates and shows in base plots how the relationship changes after controlling for balance make it look clean and clear no ggplot please"
+
+
+Other than these and of course the Gemini exercise, I did not use AI other than trying to cut words in some of my answers with the prompt: "make this more concise while keeping all depth and my writing style."
+
+
+
+

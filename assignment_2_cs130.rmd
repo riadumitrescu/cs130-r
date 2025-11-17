@@ -1,0 +1,247 @@
+---
+title: "CS130 Assignment 2"
+date: "October 19, 2025"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## (1) – Irreducible Error
+Irreducible error, to me, means that no matter how good the model is, there’s always going to be some randomness, missing information or messines in real life. Based on this, an irreducible error makes sense because in real life, outcomes almost always depend on many things we can’t measure or don’t even know exist. However, there are systems in life (especially the ones that are controlled and physical) in which randomness is very small (almost nonexistent). Also, the only reason we call something “irreducible” is because we haven’t measured or modeled it yet. If we could perfectly measure every variable influencing Y, for instance, all the forces in a physics experiment, then the error could be zero. So “irreducible error” is more showing the limits of humanity currently, not necesarily that it would exist if we would have infinite intelligence. Some part of this randomness reflects unmeasured causes rather than true randomness. In physical systems, the variance of e is tiny, but in social data it’s large because we can’t measure every relevant variable (preferences, moods, or random shocks). 
+
+## (2) - Inference
+
+Inference means using what we already have (data) to learn something we can’t actually see or measure directly. For example, we might not be able to watch how people make decisions, but we can look at their choices and guess what influences them. so inference uses the data to reason about what’s real but not visible, like causes, patterns, or relationships that we can’t observe directly. There’s always uncertainty, but inference helps us make the best possible conclusions from the evidence we have if it doesn't give direct conclusions by itself. Inference is also learning the underlying f(X), the structure of how predictors influence outcomes, not only obtaining accurate forecasts.
+
+## (3) - Predictive vs Causal Inference
+Predictive inference uses patterns in data to forecast outcomes. For example, an art gallery might use past social media engagement to predict next week’s visitors. The focus is on accuracy when it estimates f(x) in Y=f(X)+e, aiming to minimize prediction error.
+
+Causal inference asks why outcomes change and what would happen if we intervened. Using Rubin’s potential outcomes framework, we might ask: if the gallery increased its Instagram ad spending, how much more revenue would it earn compared to if it hadn’t? That’s a causal question because it examines the effect of changing one variable on another, not just their correlation. In Rubin’s potential outcomes model, this means comparingY(1) (treated) to Y(0) (untreated) for the same unit. Since we can only observe one of them, we use prediction to estimate the missing counterfactual.
+
+In class, we discussed that causal inference only makes sense for variables that are manipulable (we can actually imagine changing them) and that SUTVA must hold, meaning one unit’s outcome isn’t affected by another’s treatment. Predictive inference can ignore these assumptions; causal inference cannot. That’s why causal inference depends on prediction but adds conditions that let us interpret those predictions as representing “what would have happened otherwise.”
+
+## (4) - Gemini App Reflection
+The link to my gemini app: https://ai.studio/apps/drive/1Z3jyXnLE1OyjN5Q33j2ueQzyKyqt7KK1
+
+I found that a fifth point can flip the slope if it’s extreme enough, like placing it far to the right and much lower than the others. Mathematically, this point always exists, but practically it would be an outlier, far outside a realistic range. This shows how fragile regression results can be with small samples and how a single extreme value can change apparent relationships.
+
+
+## (5) - Sign Reversal Example
+
+Let's say we have an art gallery analyzing what affects daily revenue. They record three variables: social media buzz (X₁), ticket price (X₂), and artist quality (X₃). When regressing revenue on buzz alone, the coefficient is positive (buzz brings more visitors). Adding price flips it negative, since high prices reduce attendance and also correlate with lower buzz. Adding quality flips it back positive: better artists attract both higher prices and higher revenue. This is omitted variable bias, as the estimated effect of X₁ changes when related factors enter the model. It shows why correlation can’t establish causation: unless variables are randomized, confounding can reverse signs.
+
+In a randomized controlled trial (RCT), we would randomly assign levels of buzz, for example by randomly deciding which exhibitions receive extra ad promotion. Randomization removes the link between buzz and other factors like price or artist quality, making buzz statistically independent of them. That independence makes any difference in average revenue across groups to be able to be interpreted as the causal effect of buzz itself, not a side effect of unknown correlations.
+
+
+```{r}
+# storyline:
+#   y        = daily gallery revenue
+#   buzz     = x1 social media buzz score
+#   price    = x2 ticket price index
+#   quality  = x3 artist quality / prestige score
+
+set.seed(42)
+n <- 2000
+
+# make some hidden (latent) factors that will drive our variables
+U <- rnorm(n)
+V <- rnorm(n)
+W <- rnorm(n)
+
+# create variables that are related in specific ways
+price   <- 1.0*U + 0.3*rnorm(n)                # higher U → higher price
+quality <- 1.0*V + 0.3*rnorm(n)                # higher V → higher quality artist
+buzz    <- -0.9*price - 0.5*quality + 0.8*W + 0.4*rnorm(n)  # less buzz when price or quality are high
+
+# now set up the real underlying model that drives revenue
+b1 <- 0.3   # buzz really helps a bit (positive effect)
+b2 <- -1.2  # higher prices hurt revenue
+b3 <- 1.0   # better quality boosts revenue
+
+eps <- rnorm(n, sd = 1.0)
+Y <- b1*buzz + b2*price + b3*quality + eps     # true data-generating process
+
+dat <- data.frame(Y, buzz, price, quality)
+
+# run 3 regressions: first only buzz, then add price, then add quality
+m1 <- lm(Y ~ buzz, data = dat)                     # simple: does buzz alone predict revenue?
+m2 <- lm(Y ~ buzz + price, data = dat)             # now control for ticket price
+m3 <- lm(Y ~ buzz + price + quality, data = dat)   # now also control for artist quality
+
+summary(m1)
+summary(m2)
+summary(m3)
+
+## ---- From here this is generated by AI (GPT-5), as I wanted to actually see the reversal visually, I also tried to understand how the vizualization was made and added comments based on my understanding. ---- 
+
+# 2) Raw scatter of revenue vs buzz
+plot(dat$buzz, dat$Y, pch = 19, col = rgb(0, 0, 0, 0.3),
+     xlab = "Buzz", ylab = "Revenue",
+     main = "Raw: Y vs Buzz (Y ~ Buzz)")
+abline(lm(Y ~ buzz, data = dat), col = "blue", lwd = 2)
+
+# 3) Partial plot controlling for price
+rY_p  <- resid(lm(Y ~ price, data = dat))
+rX1_p <- resid(lm(buzz ~ price, data = dat))
+
+plot(rX1_p, rY_p, pch = 19, col = rgb(0, 0, 0, 0.3),
+     xlab = "Residual buzz", ylab = "Residual revenue",
+     main = "Partial on price (Y ~ buzz + price)")
+abline(lm(rY_p ~ rX1_p), col = "blue", lwd = 2)
+
+# 4) Partial plot controlling for price and quality
+rY_pq  <- resid(lm(Y ~ price + quality, data = dat))
+rX1_pq <- resid(lm(buzz ~ price + quality, data = dat))
+
+plot(rX1_pq, rY_pq, pch = 19, col = rgb(0, 0, 0, 0.3),
+     xlab = "Residual buzz", ylab = "Residual revenue",
+     main = "Partial on price and quality (Y ~ buzz + price + quality)")
+abline(lm(rY_pq ~ rX1_pq), col = "blue", lwd = 2)
+
+
+```
+
+## (6) - Confidence, Mean, and Prediction Intervals
+
+In a regression, the variables on the right side represent model parameters—the slope and intercept that describe how X affects Y. Their confidence intervals show uncertainty about the strength of that relationship. For instance, if each additional exhibition brings 20 more visitors, a 95% confidence interval of [15, 25] means we’re fairly sure the true average effect lies within that range.
+
+On the left side, the model produces predicted outcomes. The confidence interval for the mean prediction shows where the average gallery’s attendance is likely to fall, say [135, 145] visitors when hosting five exhibitions. The prediction interval, which applies to a single gallery, is wider, perhaps [120, 160], because individual galleries differ in factors like location or marketing.
+
+Together, these three intervals show different uncertainties: about the relationship itself (parameters), about expected averages (mean predictions), and about specific outcomes (prediction intervals). Even simple models, therefore, reflect uncertainty not only in what we estimate, but also in what we expect and observe. Even the best model cannot remove all uncertainty; it only shows which uncertainty could get smaller with more data and which part comes from natural randomness we cannot predict.
+
+## (7) - Training, Validation, and Cross-Validation
+In FA, we learned to divide data into training, validation, and test sets to evaluate models fairly. The training set fits the model, the validation set compares models or tunes parameters, and the test set checks performance on unseen data. This separation prevents overfitting and gives a more honest estimate of real-world accuracy.
+
+In CS130, we extended this logic through cross-validation, which repeats the training–validation process multiple times rather than relying on a single split. In k-fold cross-validation, data is divided into k equal parts; the model trains on k−1 folds and validates on the remaining one, cycling through all folds so every observation is used for both training and validation once. Leave-One-Out Cross-Validation (LOOCV) is the extreme case, where each observation will be its own validation set.
+
+We discussed that LOOCV uses nearly all data for training but tends to have high variance since validation sets overlap heavily, while k-fold (especially k = 5 or 10) has higher bias and computational efficiency. 
+
+
+## (8) - Optional Bonus. Is there a “kidney stone” story in Default?
+
+My assumption is that students might seem more or less likely to default overall, but that difference could disappear or even reverse once we account for their average balance levels (based on what GPT told me the Simpson's Paradox might be here). 
+To test this, I compared two logistic regression models ,one unadjusted (default ~ student) and one adjusted (default ~ student + balance), and visualized their predicted probabilities.
+
+```{r}
+# load packages and dataset
+set.seed(1)
+library(ISLR2)
+data("Default")
+head(Default)
+
+```
+
+```{r}
+rate_student    <- mean(Default$default[Default$student == "Yes"] == "Yes")
+rate_nonstudent <- mean(Default$default[Default$student == "No"]  == "Yes")
+
+rate_student
+rate_nonstudent
+
+# --- AI Notice: from here I used AI for plots ---
+
+# I Used AI to plot this
+barplot(height = c(rate_nonstudent, rate_student),
+        names.arg = c("Non-student", "Student"),
+        ylab = "Default rate",
+        main = "Aggregate default rate by student",
+        ylim = c(0, max(rate_nonstudent, rate_student) * 1.2))
+
+
+```
+
+```{r}
+m0 <- glm(default ~ student, data = Default, family = binomial())
+
+# I Used AI to plot this
+# Compute predicted probabilities for each group
+p_no  <- mean(predict(m0, newdata = data.frame(student = "No"),  type = "response"))
+p_yes <- mean(predict(m0, newdata = data.frame(student = "Yes"), type = "response"))
+
+
+p_no  <- predict(m0, newdata = data.frame(student = "No"),  type = "response")
+p_yes <- predict(m0, newdata = data.frame(student = "Yes"), type = "response")
+
+# Create single clean plot
+{
+  plot(0, 0, type = "n", xlim = c(0, 2500), ylim = c(0, 0.1),
+       xlab = "Balance", ylab = "Predicted default probability",
+       main = "Predicted default vs balance (non-adjusted model)")
+
+  abline(h = p_no,  col = "black", lwd = 4)
+  abline(h = p_yes, col = "red",   lwd = 4)
+
+  legend("topleft", legend = c("Non-student", "Student"),
+         col = c("black", "red"), lwd = 4, bty = "n")
+}
+
+```
+
+```{r}
+# unadjusted model: student only
+m0 <- glm(default ~ student, data = Default, family = binomial())
+
+# adjusted model: student + balance
+m1 <- glm(default ~ student + balance, data = Default, family = binomial())
+
+summary(m0)
+summary(m1)
+
+#  the student odds ratio before and after adjustment
+or_m0 <- exp(coef(m0)["studentYes"])
+or_m1 <- exp(coef(m1)["studentYes"])
+or_m0
+or_m1
+
+```
+```{r}
+# I Used AI to plot this
+
+bal_seq <- seq(min(Default$balance), max(Default$balance), length.out = 200)
+
+new_no  <- data.frame(student = factor("No",  levels = levels(Default$student)),
+                      balance = bal_seq)
+new_yes <- data.frame(student = factor("Yes", levels = levels(Default$student)),
+                      balance = bal_seq)
+
+p_no  <- predict(m1, newdata = new_no,  type = "response")
+p_yes <- predict(m1, newdata = new_yes, type = "response")
+
+plot(bal_seq, p_no, type = "l", lwd = 2,
+     xlab = "Balance", ylab = "Predicted default probability",
+     main = "Predicted default vs balance (adjusted model)")
+lines(bal_seq, p_yes, lwd = 2, col = 2)
+legend("topleft", legend = c("Non-student", "Student"),
+       lwd = 2, col = c(1, 2), bty = "n")
+
+```
+
+
+At first glance, students appear more likely to default than non-students, but this relationship reverses once we control for balance (credit card debt). Students tend to have much lower balances, and balance is the strongest predictor of default. When balance is included in the model, the student coefficient flips from positive to negative, showing that at the same balance level, students actually default slightly less often.
+
+So, yes the ISLR2 Default dataset contains a clear “kidney stone” or Simpson’s paradox story where an overall trend reverses when a confounding variable (in that case, illness severity; here, debt level) is accounted for.
+
+
+
+
+
+
+AI Statement: 
+The plot in Q5 was was generated with the help of GPT-5, as I wanted to visualize the positive → negative → positive coefficient sign reversal clearly and understand how such partial-regression plots are constructed in R. 
+I used this prompt: 
+"can you write simple r code using base r not ggplot that shows how the coefficient on x1 changes sign across three regressions and make three small plots one for the raw data and two partial plots that show how the relationship changes when i control for x2 and x3 include 95 percent confidence intervals and label everything clearly"
+
+I also used AI to generate the plot for Q9 because I  wanted to see if there’s a simpsons paradox pattern like the kidney stone story but in credit data. I used this prompt: "can you write easy r code with glm that compares student vs non student default rates and shows in base plots how the relationship changes after controlling for balance make it look clean and clear no ggplot please"
+
+
+Other than these and of course the Gemini exercise, I did not use AI other than trying to cut words in some of my answers with the prompt: "make this more concise while keeping all depth and my writing style."
+
+
+
+
